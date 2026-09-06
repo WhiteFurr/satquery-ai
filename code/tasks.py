@@ -1,17 +1,8 @@
-import torch, cv2
+import cv2
 import numpy as np
 import rasterio
 from pathlib import Path
 from PIL import Image
-from transformers import BlipProcessor, BlipForQuestionAnswering, BlipForConditionalGeneration
-from peft import PeftModel
-
-# Required imports for BigEarthNet v2.0 model and configilm
-import timm
-import bigearthnet_encoder
-import bigearthnet_common
-from reben_publication.BigEarthNetv2_0_ImageClassifier import BigEarthNetv2_0_ImageClassifier
-from configilm.extra.BENv2_utils import STANDARD_BANDS, stack_and_interpolate, NEW_LABELS
 
 def load_image(path):
     if path.lower().endswith((".tif", ".tiff")):
@@ -25,29 +16,48 @@ def load_image(path):
         return Image.fromarray(arr)
     return Image.open(path).convert("RGB")
 
-vqa_base = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
-vqa_processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
-vqa_model = PeftModel.from_pretrained(vqa_base, "outputs/vqa_adapter")
+_vqa_processor = None
+_vqa_model = None
+_cap_processor = None
+_cap_model = None
 
-cap_base = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-cap_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-cap_model = PeftModel.from_pretrained(cap_base, "outputs/caption_adapter")
 
-# Load the pretrained BigEarthNet v2.0 classifier for Optical-SAR fusion
-sar_classifier = BigEarthNetv2_0_ImageClassifier.from_pretrained("hackelle/resnet18-all-v0.1.1")
-sar_classifier.eval()
+def load_vqa_models():
+    global _vqa_processor, _vqa_model
+    if _vqa_model is None:
+        from peft import PeftModel
+        from transformers import BlipForQuestionAnswering, BlipProcessor
+
+        base = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+        _vqa_processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+        _vqa_model = PeftModel.from_pretrained(base, "outputs/vqa_adapter")
+    return _vqa_processor, _vqa_model
+
+
+def load_caption_models():
+    global _cap_processor, _cap_model
+    if _cap_model is None:
+        from peft import PeftModel
+        from transformers import BlipForConditionalGeneration, BlipProcessor
+
+        base = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        _cap_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        _cap_model = PeftModel.from_pretrained(base, "outputs/caption_adapter")
+    return _cap_processor, _cap_model
 
 def run_vqa(image_path, query):
     img = load_image(image_path)
-    inputs = vqa_processor(img, query, return_tensors="pt")
-    out = vqa_model.generate(**inputs, max_new_tokens=30)
-    return vqa_processor.decode(out[0], skip_special_tokens=True)
+    processor, model = load_vqa_models()
+    inputs = processor(img, query, return_tensors="pt")
+    out = model.generate(**inputs, max_new_tokens=30)
+    return processor.decode(out[0], skip_special_tokens=True)
 
 def run_captioning(image_path, query):
     img = load_image(image_path)
-    inputs = cap_processor(img, return_tensors="pt")
-    out = cap_model.generate(**inputs, max_new_tokens=60)
-    return cap_processor.decode(out[0], skip_special_tokens=True)
+    processor, model = load_caption_models()
+    inputs = processor(img, return_tensors="pt")
+    out = model.generate(**inputs, max_new_tokens=60)
+    return processor.decode(out[0], skip_special_tokens=True)
 
 def run_change_vqa(image1_path, image2_path, query):
     img1 = load_image(image1_path)
@@ -59,10 +69,11 @@ def run_change_vqa(image1_path, image2_path, query):
     cv2.imwrite("outputs/change_mask.png", thresh)
     change_ratio = np.count_nonzero(thresh) / thresh.size
 
-    cap1_inputs = cap_processor(img1, return_tensors="pt")
-    cap2_inputs = cap_processor(img2, return_tensors="pt")
-    desc1 = cap_processor.decode(cap_model.generate(**cap1_inputs, max_new_tokens=40)[0], skip_special_tokens=True)
-    desc2 = cap_processor.decode(cap_model.generate(**cap2_inputs, max_new_tokens=40)[0], skip_special_tokens=True)
+    processor, model = load_caption_models()
+    cap1_inputs = processor(img1, return_tensors="pt")
+    cap2_inputs = processor(img2, return_tensors="pt")
+    desc1 = processor.decode(model.generate(**cap1_inputs, max_new_tokens=40)[0], skip_special_tokens=True)
+    desc2 = processor.decode(model.generate(**cap2_inputs, max_new_tokens=40)[0], skip_special_tokens=True)
 
     if change_ratio < 0.01:
         return f"No significant change detected. Before: {desc1}. After: {desc2}."
@@ -79,6 +90,8 @@ def find_band_file(folder: Path, required_band: str, extensions):
 
 
 def load_patch(s1_dir: Path, s2_dir: Path, model):
+    from configilm.extra.BENv2_utils import STANDARD_BANDS, stack_and_interpolate
+
     channels = model.config.channels
     image_size = model.config.image_size
 
@@ -107,9 +120,15 @@ def load_patch(s1_dir: Path, s2_dir: Path, model):
 
 
 def run_cross_modal_fusion(s1_path, s2_path, query):
+    import torch
+    from configilm.extra.BENv2_utils import NEW_LABELS
+    from reben_publication.BigEarthNetv2_0_ImageClassifier import BigEarthNetv2_0_ImageClassifier
+
     s1_dir = Path(s1_path)
     s2_dir = Path(s2_path)
-    
+    sar_classifier = BigEarthNetv2_0_ImageClassifier.from_pretrained("hackelle/resnet18-all-v0.1.1")
+    sar_classifier.eval()
+
     with torch.no_grad():
         tensor = load_patch(s1_dir, s2_dir, sar_classifier)
         output = sar_classifier(tensor)

@@ -16,3 +16,9 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+node_modules/
+dist/
+data/uploads/*
+!data/uploads/.gitkeep
+outputs/change_mask.png
