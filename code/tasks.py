@@ -27,11 +27,11 @@ def load_image(path):
 
 vqa_base = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
 vqa_processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
-vqa_model = PeftModel.from_pretrained(vqa_base, "../outputs/vqa_adapter")
+vqa_model = PeftModel.from_pretrained(vqa_base, "outputs/vqa_adapter")
 
 cap_base = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 cap_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-cap_model = PeftModel.from_pretrained(cap_base, "../outputs/caption_adapter")
+cap_model = PeftModel.from_pretrained(cap_base, "outputs/caption_adapter")
 
 # Load the pretrained BigEarthNet v2.0 classifier for Optical-SAR fusion
 sar_classifier = BigEarthNetv2_0_ImageClassifier.from_pretrained("hackelle/resnet18-all-v0.1.1")
@@ -56,7 +56,7 @@ def run_change_vqa(image1_path, image2_path, query):
     arr1, arr2 = np.array(img1), np.array(img2)
     diff = cv2.absdiff(arr1, arr2)
     _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
-    cv2.imwrite("../outputs/change_mask.png", thresh)
+    cv2.imwrite("outputs/change_mask.png", thresh)
     change_ratio = np.count_nonzero(thresh) / thresh.size
 
     cap1_inputs = cap_processor(img1, return_tensors="pt")
@@ -93,7 +93,7 @@ def load_patch(s1_dir: Path, s2_dir: Path, model):
             with rasterio.open(file) as src:
                 data[band] = src.read(1)
         for band in s1_bands:
-            file = find_band_file(s2_dir, band, ["tif", "tiff"])
+            file = find_band_file(s1_dir, band, ["tif", "tiff"])
             if file is None:
                 raise FileNotFoundError(f"Missing S1 band {band} in {s1_dir}")
             with rasterio.open(file) as src:

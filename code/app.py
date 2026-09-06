@@ -21,7 +21,7 @@ if st.button("Submit") and uploaded_files and query:
     paths = []
 
     for f in uploaded_files:
-        path = f"../data/uploads/{f.name}"
+        path = f"data/uploads/{f.name}"
 
         with open(path, "wb") as out:
             out.write(f.read())
