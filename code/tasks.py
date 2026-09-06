@@ -105,6 +105,7 @@ def load_patch(s1_dir: Path, s2_dir: Path, model):
     return img.unsqueeze(0)
 
 
+
 def run_cross_modal_fusion(s1_path, s2_path, query):
     s1_dir = Path(s1_path)
     s2_dir = Path(s2_path)
