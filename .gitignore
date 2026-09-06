@@ -1,12 +1,6 @@
 # Virtual environment
 ben311/
 
-# Data
-data/
-
-# Outputs
-outputs/
-
 # Python
 __pycache__/
 *.pyc
