@@ -4,9 +4,13 @@ from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
 from pydantic import BaseModel
 
-from controller import CentralController
+try:
+    from .controller import CentralController
+except ImportError:
+    from controller import CentralController
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / 'data' / 'uploads'
@@ -135,6 +139,13 @@ async def analyze(
         else:
             raise ValueError(f'Unsupported mode: {mode}')
 
+        first_image = files[0] if files else None
+        if first_image:
+            try:
+                with Image.open(first_image) as image:
+                    response['image'] = {'width': image.width, 'height': image.height}
+            except (OSError, ValueError):
+                pass
         payload['request'] = 'success'
         payload['result'] = response
         payload['status'] = 'ok'

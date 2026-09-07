@@ -1,5 +1,8 @@
 import rasterio
-from tasks import run_vqa, run_captioning, run_change_vqa, run_cross_modal_fusion
+try:
+    from .tasks import run_vqa, run_captioning, run_change_vqa, run_cross_modal_fusion
+except ImportError:
+    from tasks import run_vqa, run_captioning, run_change_vqa, run_cross_modal_fusion
 
 def detect_modality(filepath):
     if not filepath.lower().endswith((".tif", ".tiff")):

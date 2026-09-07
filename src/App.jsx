@@ -46,6 +46,7 @@ function App() {
     const checkStatus = async () => {
       try {
         const response = await fetch(`${API_URL}/api/status`)
+        if (!response.ok) throw new Error(`Status request failed (${response.status})`)
         const data = await response.json()
         if (active) setModelStatus(data.request === 'processing' ? `${data.mode} processing` : data.classification)
       } catch {
@@ -82,12 +83,19 @@ function App() {
     const timeout = window.setTimeout(() => controller.abort(), 10 * 60 * 1000)
     try {
       const response = await fetch(`${API_URL}/api/analyze`, { method: 'POST', body, signal: controller.signal })
-      const data = await response.json()
+      const responseText = await response.text()
+      let data
+      try {
+        data = responseText ? JSON.parse(responseText) : null
+      } catch {
+        throw new Error(`The API returned an invalid response (${response.status}).`)
+      }
+      if (!data) throw new Error(`The API returned an empty response (${response.status}). Is the backend running on port 8000?`)
       if (!response.ok) {
         const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message
         throw new Error(detail || 'Model request failed')
       }
-      setResult(data); setStatus('success'); setModelStatus('running')
+      setResult(data.result || data); setStatus('success'); setModelStatus('running')
     } catch (requestError) {
       setError(requestError.name === 'AbortError' ? 'The model took too long to load. Check the backend terminal and try again.' : requestError.message)
       setStatus('error')

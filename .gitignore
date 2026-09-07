@@ -21,4 +21,4 @@ node_modules/
 dist/
 data/uploads/*
 !data/uploads/.gitkeep
-outputs/change_mask.png
+outputs/change_mask.pngsatquery-ai/
